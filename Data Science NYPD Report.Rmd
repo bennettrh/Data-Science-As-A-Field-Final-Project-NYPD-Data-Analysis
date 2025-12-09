@@ -1,0 +1,116 @@
+---
+title: "Data Science As A Field M3"
+output: github_document 
+date: "`r Sys.Date()`"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+Imported below is the NYPD shooting incident data pulled from the listed URL. The data is already formatted appropriately for the time being, with a single row per incident.  
+
+
+```{r libraries}
+library(tidyverse)
+library(ggplot2)
+
+```
+
+```{r get_nypd_data}
+url_in = "https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD"
+
+nypd_data = read_csv(url_in)
+
+head(nypd_data)
+
+```
+We will start by cleaning the data. We set OCCUR_DATE to a date variable. We also notice that Longitude and Latitude have several NA values. After confirming that these are not housed in the Lon_Lat column, we remove rows with N/A longitude latitude.We also remove the lon_lat column as it is redundant in combination with the longitude and latitude columns. All discrete variables have additionally been set as factors.For the sake of later analysis, we consolidated NA values and values with (null) in PERP_AGE_GROUP to match the already existing "UNKNOWN" category. I also filtered out some one-off seemingly mistyped values for perp_age_group and vic_age_group. There was only one row per misspelling so I felt comfortable removing them entirely. 
+
+
+```{r clean_nypd_data}
+print(summary(nypd_data))
+
+clean_nypd_data = nypd_data %>% 
+  mutate(OCCUR_DATE = mdy(OCCUR_DATE)) %>%
+  drop_na(Latitude, Longitude) %>% 
+  select(-Lon_Lat) %>%
+  mutate(across(.cols = c(BORO, STATISTICAL_MURDER_FLAG, PERP_AGE_GROUP, PERP_SEX, PERP_RACE, VIC_AGE_GROUP, VIC_SEX, VIC_RACE))) %>%
+  mutate(PERP_AGE_GROUP = if_else(PERP_AGE_GROUP == "(null)", "UNKNOWN", PERP_AGE_GROUP)) %>%
+  mutate(PERP_AGE_GROUP = replace_na(PERP_AGE_GROUP, "UNKNOWN")) %>%
+  filter(!PERP_AGE_GROUP %in% c("1020", "1028", "2021", "224", "940")) %>%
+  filter(!VIC_AGE_GROUP %in% c("1022"))
+```
+
+This first visual looks at shootings by Boro. It is clear that Brooklyn has the most shootings, followed by the Bronx. Staten Island has the least by far. It would be interesting to compare this to the population of each area had the data been available in the dataset. 
+
+```{r visual_1}
+cases_by_boro = clean_nypd_data %>% 
+  group_by(BORO) %>% 
+  summarize(count = n())
+
+ggplot(data = cases_by_boro, aes(y = count, x = BORO)) + geom_bar(stat = "identity") + labs(title = "Shootings by Boro", y = "Shootings", x = "Boro")
+
+```
+
+This second visual looks at the age demographic of perpetrators by Boro. Although Staten Island had the least incidents, it also has the largest percent of young perpetrators. This could be debatable given the large and varied "Unknown" segments across all 5 boros. 
+
+```{r visual_2}
+
+cases_by_boro_age = clean_nypd_data %>% 
+  group_by(BORO, PERP_AGE_GROUP) %>%
+  summarize(count = n())
+
+ggplot(cases_by_boro_age, aes(x = BORO, y = count, fill = PERP_AGE_GROUP)) +
+  geom_bar(stat = "identity", position = "fill") + 
+  labs(
+    title = "Perpetrator Age Across Boros",
+    x = "Boro",
+    y = "% of total shootings"
+  )
+
+
+
+```
+
+
+The following graph shows some interesting insight into the relationship between perpetrator age group and victim age group. Most crime under the age of 18 is committed against others under the age of 18. The same can be said for the 65+ group. Perpetrators over the age of 65 commit the most crimes against other 65 year olds relative to other groups. 
+
+
+```{r victim age vs perp age}
+
+cases_by_age = clean_nypd_data %>% 
+  group_by(PERP_AGE_GROUP, VIC_AGE_GROUP) %>%
+  summarize(count = n())
+
+
+ggplot(cases_by_age, aes(x = PERP_AGE_GROUP, y = count, fill = VIC_AGE_GROUP)) + 
+  geom_bar(stat = "identity", position = "fill") + 
+  labs(
+    title = "Victim Age by Perpetrator Age", 
+    y = "% of total shootings", 
+    x = "Perpetrator Age Range"
+  )
+
+
+
+
+
+
+
+
+
+
+```
+
+This analysis is subject to personal and non-personal bias. The conclusions reached are informed by my own personal bias. For example, I might favor my own age group when looking at perpetrator/victim age, or I may miss important conclusions for other age groups as a result. Furthermore, biases exist in the data itself. Perpetrator age had a large quantity of unknown values. If the actual values of these unknown values are skewed to one specific age demographic, the conclusions reached may be innaccurate. 
+
+
+
+
+
+
+
+
